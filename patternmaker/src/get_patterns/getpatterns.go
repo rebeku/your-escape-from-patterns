@@ -19,7 +19,7 @@ const idKey = "ids"
 func main() {
 	username := os.Getenv("RAVELRY_CONSUMER")
 	password := os.Getenv("RAVELRY_SECRET")
-	c := &http.Client{}
+	c := client.NewClient(username, password)
 
 	psr := getPatternSearchResults(c, username, password)
 	fmt.Printf("Successfully downloaded %d patterns\n", psr.Paginator.Results)
@@ -27,12 +27,12 @@ func main() {
 	fmt.Println(pats)
 }
 
-func getPatternSearchResults(c *http.Client, username, password string) *client.PatternSearchResult {
+func getPatternSearchResults(c *client.Client, username, password string) *client.PatternSearchResult {
 	req, err := http.NewRequest(http.MethodGet, PatternSearchEndpoint, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	req.SetBasicAuth(username, password)
+
 	resp, err := c.Do(req)
 	if err != nil {
 		log.Fatal(err)
@@ -52,15 +52,14 @@ func getPatternSearchResults(c *http.Client, username, password string) *client.
 	return psr
 }
 
-func getPatternDetails(c *http.Client, username, password string, psr *client.PatternSearchResult) map[string]client.Pattern {
-	ids := strings.Join(psr.GetPatternIDs()[:6], "+")
+func getPatternDetails(c *client.Client, username, password string, psr *client.PatternSearchResult) map[string]client.Pattern {
+	ids := strings.Join(psr.GetPatternIDs(), "+")
 	detailsEndpoint := PatternDetailsEndpoint + ids
 
 	req, err := http.NewRequest(http.MethodGet, detailsEndpoint, nil)
 	if err != nil {
 		log.Println(err)
 	}
-	req.SetBasicAuth(username, password)
 
 	resp, err := c.Do(req)
 	if err != nil {
