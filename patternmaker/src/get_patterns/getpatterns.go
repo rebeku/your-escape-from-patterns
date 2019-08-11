@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rebeku/patternmaker/src/get_patterns/client"
+	"github.com/rebeku/patternmaker/src/get_patterns/ravelry"
 )
 
 const PatternSearchEndpoint = "https://api.ravelry.com/patterns/search.json?craft=knitting&availability=ravelry%2Bfree"
@@ -19,7 +19,7 @@ const idKey = "ids"
 func main() {
 	username := os.Getenv("RAVELRY_CONSUMER")
 	password := os.Getenv("RAVELRY_SECRET")
-	c := client.NewClient(username, password)
+	c := ravelry.NewClient(username, password)
 
 	psr := getPatternSearchResults(c, username, password)
 	fmt.Printf("Successfully downloaded %d patterns\n", psr.Paginator.Results)
@@ -27,7 +27,7 @@ func main() {
 	fmt.Println(pats)
 }
 
-func getPatternSearchResults(c *client.Client, username, password string) *client.PatternSearchResult {
+func getPatternSearchResults(c *ravelry.Client, username, password string) *ravelry.PatternSearchResult {
 	req, err := http.NewRequest(http.MethodGet, PatternSearchEndpoint, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -43,7 +43,7 @@ func getPatternSearchResults(c *client.Client, username, password string) *clien
 		log.Fatal(err)
 	}
 
-	var psr *client.PatternSearchResult
+	var psr *ravelry.PatternSearchResult
 	err = json.Unmarshal(body, &psr)
 	if err != nil {
 		fmt.Println(string(body))
@@ -52,7 +52,7 @@ func getPatternSearchResults(c *client.Client, username, password string) *clien
 	return psr
 }
 
-func getPatternDetails(c *client.Client, username, password string, psr *client.PatternSearchResult) map[string]client.Pattern {
+func getPatternDetails(c *ravelry.Client, username, password string, psr *ravelry.PatternSearchResult) map[string]ravelry.Pattern {
 	ids := strings.Join(psr.GetPatternIDs(), "+")
 	detailsEndpoint := PatternDetailsEndpoint + ids
 
@@ -71,7 +71,7 @@ func getPatternDetails(c *client.Client, username, password string, psr *client.
 		log.Fatal(err)
 	}
 
-	var pdsr client.PatternDetailSearchResult
+	var pdsr ravelry.PatternDetailSearchResult
 	err = json.Unmarshal(body, &pdsr)
 	if err != nil {
 		log.Fatal(err)
