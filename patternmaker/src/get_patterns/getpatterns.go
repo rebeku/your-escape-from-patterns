@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
@@ -14,7 +13,7 @@ import (
 )
 
 const PatternSearchEndpoint = "https://api.ravelry.com/patterns/search.json?craft=knitting&availability=ravelry%2Bfree"
-const PatternDetailsEndpoint = "https://api.ravelry.com/patterns.json?"
+const PatternDetailsEndpoint = "https://api.ravelry.com/patterns.json?ids="
 const idKey = "ids"
 
 func main() {
@@ -54,12 +53,8 @@ func getPatternSearchResults(c *http.Client, username, password string) *client.
 }
 
 func getPatternDetails(c *http.Client, username, password string, psr *client.PatternSearchResult) map[string]client.Pattern {
-	v := url.Values{}
 	ids := strings.Join(psr.GetPatternIDs()[:6], "+")
-	v.Set(idKey, ids)
-
-	detailsEndpoint := PatternDetailsEndpoint + v.Encode()
-	fmt.Println(detailsEndpoint)
+	detailsEndpoint := PatternDetailsEndpoint + ids
 
 	req, err := http.NewRequest(http.MethodGet, detailsEndpoint, nil)
 	if err != nil {
