@@ -1,6 +1,9 @@
 package ravelry
 
-import "net/http"
+import (
+	"errors"
+	"net/http"
+)
 
 // Client is a ravelry.com ravelry that adds Authorization headers
 // to all requests
@@ -12,7 +15,11 @@ type Client struct {
 
 func NewClient(username, password string) *Client {
 	return &Client{
-		Client:   http.Client{},
+		Client: http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return errors.New(req.URL.String())
+			},
+		},
 		username: username,
 		password: password,
 	}

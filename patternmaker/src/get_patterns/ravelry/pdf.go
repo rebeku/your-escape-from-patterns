@@ -4,22 +4,35 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"golang.org/x/net/html"
 )
 
-func GetPDF(c *Client, url string) ([]string, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func GetPDF(c *Client, urlString string) ([]string, error) {
+
+	req, err := http.NewRequest(http.MethodGet, urlString, nil)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		// This is totally sketch but I am saving the redirect URL
+		// as an error in the redirect policy because that's the only
+		// concurrencys-safe way I know to do it.
+		redirectURL := err.(*url.Error).Err.Error()
+		_, urlErr := url.Parse(redirectURL)
+		if urlErr != nil {
+			return nil, err
+		}
+		return []string{redirectURL}, nil
+	} else if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Failed to get page with status code%d", resp.StatusCode)
 	}
+	fmt.Println(resp.StatusCode)
 	filenames, err := getFilenames(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return filenames, nil
 	// TODO: actually select, download, and parse file
@@ -42,6 +55,11 @@ func isFilenameClass(z *html.Tokenizer) bool {
 }
 
 func getFilenames(body io.Reader) ([]string, error) {
+	var bod []byte
+	_, err := body.Read(bod)
+	if err != nil {
+		return nil, err
+	}
 	z := html.NewTokenizer(body)
 	filenames := make([]string, 0, 10)
 	expectFilenameNext := false
@@ -85,5 +103,4 @@ func getFilenames(body io.Reader) ([]string, error) {
 	}
 	// this should never happen.
 	return filenames, nil
-
 }
