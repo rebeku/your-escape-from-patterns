@@ -5,6 +5,9 @@ import (
 	"net/http"
 )
 
+// Endpoint is the top level endpoint for Ravelry's API
+const Endpoint = "https://api.ravelry.com/"
+
 // Client is a ravelry.com ravelry that adds Authorization headers
 // to all requests
 type Client struct {

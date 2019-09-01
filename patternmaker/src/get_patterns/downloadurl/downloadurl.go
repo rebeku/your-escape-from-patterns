@@ -1,19 +1,23 @@
-package ravelry
+package downloadurl
 
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
+	"time"
 
+	"github.com/rebeku/patternmaker/src/get_patterns/ravelry"
 	"golang.org/x/net/html"
 )
 
-func GetPDF(c *Client, urlString string) ([]string, error) {
-
+// GetDownloadURL scrapes URL of actual pattern downloads from page content
+// unfortunately, this is not avialable through the API
+func GetDownloadURL(c *ravelry.Client, urlString string) ([]string, error, string) {
 	req, err := http.NewRequest(http.MethodGet, urlString, nil)
 	if err != nil {
-		return nil, err
+		return nil, err, "request error"
 	}
 	resp, err := c.Do(req)
 	if err != nil {
@@ -23,21 +27,24 @@ func GetPDF(c *Client, urlString string) ([]string, error) {
 		redirectURL := err.(*url.Error).Err.Error()
 		_, urlErr := url.Parse(redirectURL)
 		if urlErr != nil {
-			return nil, err
+			//fmt.Printf("Error parsing redirect URL %s: %v\n", redirectURL, urlErr)
+			return nil, err, "error parsing error"
 		}
-		return []string{redirectURL}, nil
+		time.Sleep(time.Second)
+		fmt.Println("Returning redirect URL for ", urlString)
+		return []string{redirectURL}, nil, fmt.Sprintf("redirect to %s", redirectURL)
+
+	} else if resp.StatusCode == http.StatusServiceUnavailable {
+		time.Sleep(time.Duration(int64(rand.Float64() * 1e9)))
+		GetDownloadURL(c, urlString)
 	} else if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Failed to get page with status code%d", resp.StatusCode)
+		return nil, fmt.Errorf("Failed to get page with status code%d", resp.StatusCode), "status not okay"
 	}
-	fmt.Println(resp.StatusCode)
 	filenames, err := getFilenames(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, err, "error scraping filenames for response body"
 	}
-	return filenames, nil
-	// TODO: actually select, download, and parse file
-	// englishFile := selectEnglishPdf(filenames)
-	// return parseWordsFromPDF(englishFile)
+	return filenames, nil, "scraped filenames from page"
 }
 
 const class = "class"
