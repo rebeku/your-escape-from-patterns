@@ -6,18 +6,60 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
+	"github.com/rebeku/patternmaker/src/get_patterns/patterndetail"
 	"github.com/rebeku/patternmaker/src/get_patterns/ravelry"
 	"golang.org/x/net/html"
 )
 
+type DownloadLoc struct {
+	ID       string
+	StartURL string
+	URLs     []string
+}
+
+func DownloadURLSource(c *ravelry.Client, pats map[string]patterndetail.Pattern) <-chan DownloadLoc {
+	out := make(chan DownloadLoc)
+
+	var wg sync.WaitGroup
+	wg.Add(len(pats))
+
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+
+	for id, pat := range pats {
+		id := id
+		urlString := pat.DownloadLocation.URL
+		go func() {
+			defer wg.Done()
+			urls, err := getDownloadURL(c, urlString)
+			if err != nil {
+				fmt.Println("Error getting download URL: ", err)
+				return
+			}
+			if len(urls) == 0 {
+				fmt.Printf("ID: %s\nURL: %s\nurls: %v\n\n", id, urlString, urls)
+			}
+			out <- DownloadLoc{
+				ID:       id,
+				StartURL: urlString,
+				URLs:     urls,
+			}
+		}()
+	}
+	return out
+}
+
 // GetDownloadURL scrapes URL of actual pattern downloads from page content
 // unfortunately, this is not avialable through the API
-func GetDownloadURL(c *ravelry.Client, urlString string) ([]string, error, string) {
+func getDownloadURL(c *ravelry.Client, urlString string) ([]string, error) {
 	req, err := http.NewRequest(http.MethodGet, urlString, nil)
 	if err != nil {
-		return nil, err, "request error"
+		return nil, err
 	}
 	resp, err := c.Do(req)
 	if err != nil {
@@ -28,23 +70,17 @@ func GetDownloadURL(c *ravelry.Client, urlString string) ([]string, error, strin
 		_, urlErr := url.Parse(redirectURL)
 		if urlErr != nil {
 			//fmt.Printf("Error parsing redirect URL %s: %v\n", redirectURL, urlErr)
-			return nil, err, "error parsing error"
+			return nil, err
 		}
-		time.Sleep(time.Second)
-		fmt.Println("Returning redirect URL for ", urlString)
-		return []string{redirectURL}, nil, fmt.Sprintf("redirect to %s", redirectURL)
-
+		time.Sleep(10 * time.Second)
+		return []string{redirectURL}, nil
 	} else if resp.StatusCode == http.StatusServiceUnavailable {
 		time.Sleep(time.Duration(int64(rand.Float64() * 1e9)))
-		GetDownloadURL(c, urlString)
+		return getDownloadURL(c, urlString)
 	} else if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Failed to get page with status code%d", resp.StatusCode), "status not okay"
+		return nil, fmt.Errorf("Failed to get page with status code%d", resp.StatusCode)
 	}
-	filenames, err := getFilenames(resp.Body)
-	if err != nil {
-		return nil, err, "error scraping filenames for response body"
-	}
-	return filenames, nil, "scraped filenames from page"
+	return getFilenames(resp.Body)
 }
 
 const class = "class"

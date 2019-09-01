@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/rebeku/patternmaker/src/get_patterns/downloadurl"
 	"github.com/rebeku/patternmaker/src/get_patterns/patterndetail"
@@ -13,16 +12,6 @@ import (
 )
 
 const idKey = "ids"
-
-func toMap(sm sync.Map) map[string]interface{} {
-	m := make(map[string]interface{})
-	saveVals := func(k, v interface{}) bool {
-		m[fmt.Sprintf("%v", k)] = v
-		return true
-	}
-	sm.Range(saveVals)
-	return m
-}
 
 func main() {
 	username := os.Getenv("RAVELRY_CONSUMER")
@@ -33,32 +22,14 @@ func main() {
 	fmt.Printf("Successfully downloaded %d patterns\n", psr.Paginator.Results)
 	pats := patterndetail.GetResults(c, psr)
 
-	var fnameMap sync.Map
-	var wg sync.WaitGroup
-	wg.Add(len(pats))
+	var fnameMap map[string]downloadurl.DownloadLoc
 
-	for id, pat := range pats {
-		id := id
-		url := pat.DownloadLocation.URL
-		go func() {
-			defer wg.Done()
-			filenames, err, desc := downloadurl.GetDownloadURL(c, url)
-			if err != nil {
-				fmt.Println("Error scraping download locations: ", err)
-				return
-			}
-			if len(filenames) == 0 {
-				fmt.Printf("ID: %s\nURL: %s\ndescription: %s\nfilenames: %v\n\n", id, url, desc, filenames)
-			}
-			fnameMap.Store(id, filenames)
-		}()
+	urlc := downloadurl.DownloadURLSource(c, pats)
+	for dl := range urlc {
+		fnameMap[dl.ID] = dl
 	}
 
-	wg.Wait()
-	nameMap := toMap(fnameMap)
-	fmt.Println(nameMap)
-
-	jPats, err := json.Marshal(nameMap)
+	jPats, err := json.Marshal(fnameMap)
 
 	if err != nil {
 		fmt.Println("Error marshalling pats to json: ", err)
