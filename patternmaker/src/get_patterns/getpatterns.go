@@ -22,14 +22,14 @@ func main() {
 	fmt.Printf("Successfully downloaded %d patterns\n", psr.Paginator.Results)
 	pats := patterndetail.GetResults(c, psr)
 
-	var fnameMap map[string]downloadurl.DownloadLoc
+	fnameMap := make(map[string]downloadurl.DownloadLoc)
 
 	urlc := downloadurl.DownloadURLSource(c, pats)
 	for dl := range urlc {
 		fnameMap[dl.ID] = dl
 	}
 
-	jPats, err := json.Marshal(fnameMap)
+	jPats, err := json.MarshalIndent(fnameMap, "", "    ")
 
 	if err != nil {
 		fmt.Println("Error marshalling pats to json: ", err)
