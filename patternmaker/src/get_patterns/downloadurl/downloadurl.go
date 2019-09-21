@@ -15,24 +15,19 @@ import (
 )
 
 type DownloadLoc struct {
-	ID       string
+	ID       int
 	StartURL string
 	URLs     []string
 }
 
-func DownloadURLSource(c *ravelry.Client, pats map[string]patterndetail.Pattern) <-chan DownloadLoc {
+func DownloadURLSource(c *ravelry.Client, pdc chan *patterndetail.Pattern) chan DownloadLoc {
 	out := make(chan DownloadLoc)
 
 	var wg sync.WaitGroup
-	wg.Add(len(pats))
 
-	go func() {
-		wg.Wait()
-		close(out)
-	}()
-
-	for id, pat := range pats {
-		id := id
+	for pat := range pdc {
+		wg.Add(1)
+		pat := pat
 		urlString := pat.DownloadLocation.URL
 		go func() {
 			defer wg.Done()
@@ -42,15 +37,21 @@ func DownloadURLSource(c *ravelry.Client, pats map[string]patterndetail.Pattern)
 				return
 			}
 			if len(urls) == 0 {
-				fmt.Printf("ID: %s\nURL: %s\nurls: %v\n\n", id, urlString, urls)
+				fmt.Printf("ID: %d\nURL: %s\nurls: %v\n\n", pat.ID, urlString, urls)
 			}
 			out <- DownloadLoc{
-				ID:       id,
+				ID:       pat.ID,
 				StartURL: urlString,
 				URLs:     urls,
 			}
 		}()
 	}
+
+	go func() {
+		wg.Wait()
+		fmt.Println("Closing downloadURL channel")
+		close(out)
+	}()
 	return out
 }
 
@@ -80,6 +81,7 @@ func getDownloadURL(c *ravelry.Client, urlString string) ([]string, error) {
 	} else if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Failed to get page with status code%d", resp.StatusCode)
 	}
+	defer resp.Body.Close()
 	return getFilenames(resp.Body)
 }
 

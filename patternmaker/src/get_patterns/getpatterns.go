@@ -18,15 +18,24 @@ func main() {
 	password := os.Getenv("RAVELRY_SECRET")
 	c := ravelry.NewClient(username, password)
 
-	psr := patternsearch.GetResults(c)
-	fmt.Printf("Successfully downloaded %d patterns\n", psr.Paginator.Results)
-	pats := patterndetail.GetResults(c, psr)
+	psc, psec := patternsearch.GetResults(c)
+	pdc, pdec := patterndetail.GetResults(c, psc)
 
+	go func() {
+		for err := range psec {
+			fmt.Println("Error searching pattern: ", err)
+		}
+	}()
+	go func() {
+		for err := range pdec {
+			fmt.Println("Error getting pattern detail: ", err)
+		}
+	}()
 	fnameMap := make(map[string]downloadurl.DownloadLoc)
 
-	urlc := downloadurl.DownloadURLSource(c, pats)
+	urlc := downloadurl.DownloadURLSource(c, pdc)
 	for dl := range urlc {
-		fnameMap[dl.ID] = dl
+		fnameMap[fmt.Sprintf("%d", dl.ID)] = dl
 	}
 
 	jPats, err := json.MarshalIndent(fnameMap, "", "    ")
