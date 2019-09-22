@@ -1,6 +1,7 @@
 package downloadurl
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -20,39 +21,62 @@ type DownloadLoc struct {
 	URLs     []string
 }
 
+const nWorkers = 1
+
 func DownloadURLSource(c *ravelry.Client, pdc chan *patterndetail.Pattern) chan DownloadLoc {
 	out := make(chan DownloadLoc)
+	done := make(chan struct{})
 
 	var wg sync.WaitGroup
 
-	for pat := range pdc {
-		wg.Add(1)
-		pat := pat
-		urlString := pat.DownloadLocation.URL
+	for i := 0; i < nWorkers; i++ {
 		go func() {
-			defer wg.Done()
-			urls, err := getDownloadURL(c, urlString)
-			if err != nil {
-				fmt.Println("Error getting download URL: ", err)
-				return
-			}
-			if len(urls) == 0 {
-				fmt.Printf("ID: %d\nURL: %s\nurls: %v\n\n", pat.ID, urlString, urls)
-			}
-			out <- DownloadLoc{
-				ID:       pat.ID,
-				StartURL: urlString,
-				URLs:     urls,
+			for {
+				workDone := worker(c, &wg, pdc, out)
+				if workDone {
+					done <- struct{}{}
+					return
+				}
 			}
 		}()
 	}
 
 	go func() {
+		<-done
 		wg.Wait()
 		fmt.Println("Closing downloadURL channel")
 		close(out)
 	}()
 	return out
+}
+
+var ErrNoURLs = errors.New("No URLs for pattern")
+
+func worker(c *ravelry.Client, wg *sync.WaitGroup, in chan *patterndetail.Pattern, out chan DownloadLoc) bool {
+	pat, more := <-in
+	if !more {
+		return true
+	}
+	wg.Add(1)
+	defer wg.Done()
+
+	urlString := pat.DownloadLocation.URL
+	urls, err := getDownloadURL(c, urlString)
+	if err != nil {
+		fmt.Println("Error getting download URL: ", err)
+		return false
+	}
+	if len(urls) == 0 {
+		fmt.Printf("No URLs for job %d\n", pat.ID)
+		return false
+	}
+	fmt.Printf("Got URL for pattern %d\n", pat.ID)
+	out <- DownloadLoc{
+		ID:       pat.ID,
+		StartURL: urlString,
+		URLs:     urls,
+	}
+	return false
 }
 
 // GetDownloadURL scrapes URL of actual pattern downloads from page content

@@ -36,6 +36,7 @@ func GetResults(c *ravelry.Client, psc chan []string) (chan *Pattern, chan error
 	var wg sync.WaitGroup
 
 	for patternIDs := range psc {
+		patternIDs := patternIDs
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
