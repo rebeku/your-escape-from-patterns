@@ -31,9 +31,10 @@ func main() {
 			fmt.Println("Error getting pattern detail: ", err)
 		}
 	}()
-	fnameMap := make(map[string]downloadurl.DownloadLoc)
 
 	urlc := downloadurl.DownloadURLSource(c, pdc)
+
+	fnameMap := make(map[string]downloadurl.DownloadLoc)
 	for dl := range urlc {
 		fnameMap[fmt.Sprintf("%d", dl.ID)] = dl
 	}

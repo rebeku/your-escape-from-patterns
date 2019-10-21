@@ -38,7 +38,7 @@ func (psr Result) getPatternIDs() []string {
 
 const patternSearchEndpoint = "patterns/search.json?craft=knitting&availability=ravelry%%2Bfree&page=%d"
 
-var maxPages = 10
+var maxPages = 2
 
 // GetResults returns an iterator through all free ravelry knitting patterns.
 func GetResults(c *ravelry.Client) (chan []string, chan error) {

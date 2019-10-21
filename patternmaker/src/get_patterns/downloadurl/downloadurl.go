@@ -1,13 +1,11 @@
 package downloadurl
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/rebeku/patternmaker/src/get_patterns/patterndetail"
@@ -21,62 +19,43 @@ type DownloadLoc struct {
 	URLs     []string
 }
 
-const nWorkers = 1
+const nWorkers = 3
 
-func DownloadURLSource(c *ravelry.Client, pdc chan *patterndetail.Pattern) chan DownloadLoc {
+func DownloadURLSource(c *ravelry.Client, in chan *patterndetail.Pattern) chan DownloadLoc {
 	out := make(chan DownloadLoc)
-	done := make(chan struct{})
 
-	var wg sync.WaitGroup
+	work := func() (bool, func()) {
+		pat, more := <-in
 
-	for i := 0; i < nWorkers; i++ {
-		go func() {
-			for {
-				workDone := worker(c, &wg, pdc, out)
-				if workDone {
-					done <- struct{}{}
-					return
-				}
+		return !more, func() {
+			urlString := pat.DownloadLocation.URL
+			urls, err := getDownloadURL(c, urlString)
+			if err != nil {
+				fmt.Println("Error getting download URL: ", err)
+				return
 			}
-		}()
+			if len(urls) == 0 {
+				fmt.Printf("No URLs for job %d\n", pat.ID)
+				return
+			}
+			fmt.Printf("Got URL for pattern %d\n", pat.ID)
+			out <- DownloadLoc{
+				ID:       pat.ID,
+				StartURL: urlString,
+				URLs:     urls,
+			}
+		}
 	}
 
-	go func() {
-		<-done
-		wg.Wait()
+	close := func() {
 		fmt.Println("Closing downloadURL channel")
 		close(out)
-	}()
+	}
+
+	qr := ravelry.NewQueryRunner(nWorkers, work, close)
+	qr.Run()
+
 	return out
-}
-
-var ErrNoURLs = errors.New("No URLs for pattern")
-
-func worker(c *ravelry.Client, wg *sync.WaitGroup, in chan *patterndetail.Pattern, out chan DownloadLoc) bool {
-	pat, more := <-in
-	if !more {
-		return true
-	}
-	wg.Add(1)
-	defer wg.Done()
-
-	urlString := pat.DownloadLocation.URL
-	urls, err := getDownloadURL(c, urlString)
-	if err != nil {
-		fmt.Println("Error getting download URL: ", err)
-		return false
-	}
-	if len(urls) == 0 {
-		fmt.Printf("No URLs for job %d\n", pat.ID)
-		return false
-	}
-	fmt.Printf("Got URL for pattern %d\n", pat.ID)
-	out <- DownloadLoc{
-		ID:       pat.ID,
-		StartURL: urlString,
-		URLs:     urls,
-	}
-	return false
 }
 
 // GetDownloadURL scrapes URL of actual pattern downloads from page content
@@ -97,9 +76,9 @@ func getDownloadURL(c *ravelry.Client, urlString string) ([]string, error) {
 			//fmt.Printf("Error parsing redirect URL %s: %v\n", redirectURL, urlErr)
 			return nil, err
 		}
-		time.Sleep(10 * time.Second)
 		return []string{redirectURL}, nil
 	} else if resp.StatusCode == http.StatusServiceUnavailable {
+		fmt.Println("Service unavailable.  Sleeping.")
 		time.Sleep(time.Duration(int64(rand.Float64() * 1e9)))
 		return getDownloadURL(c, urlString)
 	} else if resp.StatusCode != http.StatusOK {
