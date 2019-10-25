@@ -43,7 +43,7 @@ func (qr *QueryRunner) Run() {
 			for {
 				workDone := qr.work()
 				if workDone {
-					fmt.Println("work done")
+					fmt.Println("all jobs started")
 					allJobsStarted <- struct{}{}
 					return
 				}

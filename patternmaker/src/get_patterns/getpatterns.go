@@ -18,20 +18,8 @@ func main() {
 	password := os.Getenv("RAVELRY_SECRET")
 	c := ravelry.NewClient(username, password)
 
-	psc, psec := patternsearch.GetResults(c)
-	pdc, pdec := patterndetail.GetResults(c, psc)
-
-	go func() {
-		for err := range psec {
-			fmt.Println("Error searching pattern: ", err)
-		}
-	}()
-	go func() {
-		for err := range pdec {
-			fmt.Println("Error getting pattern detail: ", err)
-		}
-	}()
-
+	psc := patternsearch.GetFreeDownloads(c)
+	pdc := patterndetail.GetResults(c, psc)
 	urlc := downloadurl.DownloadURLSource(c, pdc)
 
 	fnameMap := make(map[string]downloadurl.DownloadLoc)

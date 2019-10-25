@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"sync"
 
 	"github.com/rebeku/patternmaker/src/get_patterns/ravelry"
 )
@@ -38,42 +37,32 @@ func (psr Result) getPatternIDs() []string {
 
 const patternSearchEndpoint = "patterns/search.json?craft=knitting&availability=ravelry%%2Bfree&page=%d"
 
+const nWorkers = 3
+
 var maxPages = 2
 
-// GetResults returns an iterator through all free ravelry knitting patterns.
-func GetResults(c *ravelry.Client) (chan []string, chan error) {
-	rc := make(chan []string, 1)
-	ec := make(chan error, 1)
+func GetFreeDownloads(c *ravelry.Client) chan []string {
+	out := make(chan []string)
 
-	var wg sync.WaitGroup
+	page := 0
 
-	page := 1
-	lastPage := sendResult(c, page, rc, ec)
-
-	for !lastPage {
-		wg.Add(1)
-
+	work := func() (bool, func()) {
 		page++
-		if page >= maxPages {
-			fmt.Println("lastPage = true")
-			lastPage = true
+		return page > maxPages, func() {
+			sendResult(c, page, out)
 		}
-		page := page
-		go func() {
-			defer wg.Done()
-			lastPage = sendResult(c, page, rc, ec)
-		}()
 	}
-	go func() {
-		wg.Wait()
+	close := func() {
 		fmt.Println("Closing pattern search channel")
-		close(rc)
-		close(ec)
-	}()
-	return rc, ec
+		close(out)
+	}
+
+	qr := ravelry.NewQueryRunner(nWorkers, work, close)
+	qr.Run()
+	return out
 }
 
-func sendResult(c *ravelry.Client, page int, rc chan []string, ec chan error) bool {
+func sendResult(c *ravelry.Client, page int, rc chan []string) {
 	log.Printf("Getting results for page %d", page)
 	r, err := getResultPage(c, page)
 	if err == nil {
@@ -83,11 +72,8 @@ func sendResult(c *ravelry.Client, page int, rc chan []string, ec chan error) bo
 		log.Printf("Got %d results for page %d", r.Paginator.PageSize, r.Paginator.Page)
 		rc <- r.getPatternIDs()
 	} else {
-		log.Printf("Failed to get results for page %d", page)
-		ec <- err
-		return page == 0
+		log.Printf("Failed to get results for page %d: %v", page, err)
 	}
-	return page == r.Paginator.LastPage
 }
 
 const badStatusErrorString = "Failed to get pattern search page %d with status %q"
